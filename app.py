@@ -4,11 +4,30 @@ import json
 import requests
 import jwt
 import datetime as dt
+import logging
+from functools import wraps
 
 app = Flask(__name__)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Secret key for JWT (store securely in production)
 SECRET_KEY = bytes.fromhex("828691b81bdb1caf0d0b696f47b55936")
 
+# Rate limiting decorator
+def rate_limit(max_requests, window):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            # Implement rate limiting logic here
+            # Example: Use Redis to track request counts
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
+# Generate JWT token
 def generate_jwt(token: str, account_id: int) -> str:
     headers = {
         "alg": "HS256",
@@ -36,6 +55,7 @@ def generate_jwt(token: str, account_id: int) -> str:
     jwt_token = jwt.encode(payload, SECRET_KEY, algorithm="HS256", headers=headers)
     return jwt_token
 
+# Decode JWT token
 def decode_jwt(jwt_token: str):
     try:
         decoded = jwt.decode(jwt_token, SECRET_KEY, algorithms=["HS256"])
@@ -45,6 +65,7 @@ def decode_jwt(jwt_token: str):
     except jwt.InvalidTokenError:
         return {"error": "Invalid token"}
 
+# Free Fire Client
 class FF_CLIENT(threading.Thread):
     def __init__(self, id, password):
         super().__init__()
@@ -72,8 +93,13 @@ class FF_CLIENT(threading.Thread):
             "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
             "client_id": "100067",
         }
-        response = requests.post(url, headers=headers, data=data)
-        return response.json()
+        try:
+            response = requests.post(url, headers=headers, data=data)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching guest token: {e}")
+            return {"error": str(e)}
 
     def get_token(self):
         try:
@@ -90,9 +116,12 @@ class FF_CLIENT(threading.Thread):
             else:
                 self.result = {'error': 'Token not found'}
         except Exception as e:
+            logger.error(f"Error in get_token: {e}")
             self.result = {'error': str(e)}
 
+# Flask Endpoint
 @app.route('/get_player_data', methods=['GET'])
+@rate_limit(max_requests=10, window=60)  # Example: 10 requests per minute
 def get_player_data():
     player_id = request.args.get('uid')
     password = request.args.get('pass')
@@ -106,6 +135,7 @@ def get_player_data():
 
     return jsonify(client.result)
 
-if __name__ == '__main__':# your port here
+# Run the Flask app
+if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-  
+    
