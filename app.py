@@ -48,7 +48,7 @@ def generate_jwt(token: str, account_id: int) -> str:
         "external_source": 0,
         "country_code": "VN",
         "user_version": 1,
-        "release_version": "OB47",
+        "release_version": "OB48",
         "exp": dt.datetime.utcnow() + dt.timedelta(hours=1)
     }
 
